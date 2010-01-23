@@ -1,4 +1,4 @@
-package AssHAT::App::CMS;
+package AssetHandler::App::CMS;
 use strict;
 
 use MT::Util qw( format_ts relative_date ); 
@@ -7,7 +7,7 @@ use MT 4;
 
 sub open_batch_editor {
     my ($app) = @_;
-    my $plugin = MT->component('AssHAT');
+    my $plugin = MT->component('AssetHandler');
     
     my @ids = $app->param('id');
     my $blog_id = $app->param('blog_id');
@@ -89,7 +89,7 @@ sub open_batch_editor {
 
 sub save_assets {
     my ($app) = @_;
-    my $plugin = MT->component('AssHAT');
+    my $plugin = MT->component('AssetHandler');
     
     my @ids = $app->param('id');
     my $blog_id = $app->param('blog_id');
@@ -119,22 +119,21 @@ sub save_assets {
 
 sub start_transporter {
     my ($app) = @_;    
-    my $plugin = MT->component('AssHAT');
+    my $plugin = MT->component('AssetHandler');
     return $app->build_page($plugin->load_tmpl('transporter.tmpl'));
 }
 
 sub transport {
     my ($app) = @_;
-    my $q = $app->param;
     
     require MT::Blog;
-    my $blog_id = $q->param('blog_id')
+    my $blog_id = $app->param('blog_id')
         or return $app->error('No blog in context for asset import');
 
     my $blog    = MT::Blog->load($blog_id);
-    my $path    = $q->param('path');
-    my $url     = $q->param('url');
-    my $plugin  = MT->component('AssHAT');
+    my $path    = $app->param('path');
+    my $url     = $app->param('url');
+    my $plugin  = MT->component('AssetHandler');
     
     my $param   = {
         blog_id   => $blog_id,
@@ -146,7 +145,7 @@ sub transport {
     };
 
     if (-d $path){ 
-        my @files = $q->param('file');
+        my @files = $app->param('file');
         
         # This happens on the first step
         if ( !@files ) {
@@ -161,9 +160,9 @@ sub transport {
 
             @files = sort { $a->{file} cmp $b->{file} } @files; 
             $param->{files} = \@files;      
-        } else {
-            # We get here if the user has chosen some specific files to import
-            
+        }
+        else {
+            # We get here if the user has chosen some specific files to import            
             $path .= '/' unless $path =~ m!/$!; 
             $url .= '/' unless $url =~ m!/$!; 
             
