@@ -7,20 +7,17 @@ use MT::Util qw( format_ts relative_date );
 use MT 4.2;
 
 sub open_batch_editor {
-    my ($app) = @_;
-    my $plugin = MT->component('AssetHandler');
-
-    my @ids     = $app->param('id');
-    my $blog_id = $app->param('blog_id');
+    my ($app)      = @_;
+    my $plugin     = MT->component('AssetHandler');
+    my @ids        = $app->param('id');
+    my $blog_id    = $app->param('blog_id');
+    my $auth_prefs = $app->user->entry_prefs;
+    my $tag_delim  = chr( $auth_prefs->{tag_delim} );
 
     require File::Basename;
     require JSON;
-
     # require MT::Author;
     require MT::Tag;
-
-    my $auth_prefs = $app->user->entry_prefs;
-    my $tag_delim  = chr( $auth_prefs->{tag_delim} );
 
     my $hasher = sub {
         my ( $obj, $row ) = @_;
@@ -57,17 +54,28 @@ sub open_batch_editor {
         }
         my $ts = $obj->created_on;
 
-# if ( my $by = $obj->created_by ) {
-#     my $user = MT::Author->load($by);
-#     $row->{created_by} = $user ? $user->name : '';
-# }
-# if ($ts) {
-#     $row->{created_on_formatted} =
-#       format_ts( MT::App::CMS::LISTING_DATE_FORMAT, $ts, $blog, $app->user ? $app->user->preferred_language : undef );
-#     $row->{created_on_time_formatted} =
-#       format_ts( MT::App::CMS::LISTING_TIMESTAMP_FORMAT, $ts, $blog, $app->user ? $app->user->preferred_language : undef );
-#     $row->{created_on_relative} = relative_date( $ts, time, $blog );
-# }
+        # if ( my $by = $obj->created_by ) {
+        #     my $user           = MT::Author->load($by);
+        #     $row->{created_by} = $user ? $user->name : '';
+        # }
+        # if ($ts) {
+        #     my %fmt = (
+        #         created_on_formatted
+        #             => MT::App::CMS::LISTING_DATE_FORMAT,
+        #         created_on_time_formatted
+        #             => MT::App::CMS::LISTING_TIMESTAMP_FORMAT,
+        #     );
+        #     foreach my $key ( keys %fmt ) {
+        #         $row->{$key} = format_ts(
+        #             $fmt{$key}, 
+        #             $ts, 
+        #             $blog, 
+        #             $app->user ? $app->user->preferred_language : undef
+        #         );
+        #     }
+        #     $row->{created_on_relative} = relative_date( $ts, time, $blog );
+        # }
+
         $row->{metadata_json} = JSON::objToJson($meta);
 
         my $tags = MT::Tag->join( $tag_delim, $obj->tags );
@@ -98,17 +106,15 @@ sub open_batch_editor {
 }
 
 sub save_assets {
-    my ($app) = @_;
-    my $plugin = MT->component('AssetHandler');
-
-    my @ids     = $app->param('id');
-    my $blog_id = $app->param('blog_id');
+    my ($app)      = @_;
+    my $plugin     = MT->component('AssetHandler');
+    my @ids        = $app->param('id');
+    my $blog_id    = $app->param('blog_id');
+    my $auth_prefs = $app->user->entry_prefs;
+    my $tag_delim  = chr( $auth_prefs->{tag_delim} );
 
     require MT::Asset;
     require MT::Tag;
-
-    my $auth_prefs = $app->user->entry_prefs;
-    my $tag_delim  = chr( $auth_prefs->{tag_delim} );
 
     foreach my $id (@ids) {
         my $asset = MT::Asset->load($id);
@@ -135,16 +141,15 @@ sub start_transporter {
 }
 
 sub transport {
-    my ($app) = @_;
-
-    require MT::Blog;
+    my ($app)   = @_;
+    my $path    = $app->param('path');
+    my $url     = $app->param('url');
+    my $plugin  = MT->component('AssetHandler');
     my $blog_id = $app->param('blog_id')
       or return $app->error('No blog in context for asset import');
 
+    require MT::Blog;
     my $blog   = MT::Blog->load($blog_id);
-    my $path   = $app->param('path');
-    my $url    = $app->param('url');
-    my $plugin = MT->component('AssetHandler');
 
     my $param = {
         blog_id   => $blog_id,
@@ -222,15 +227,15 @@ sub transport {
 }
 
 sub _process_transport {
-    my $app = shift;
-    my ($param) = @_;
-
-    require MT::Blog;
+    my $app        = shift;
+    my ($param)    = @_;
     my $blog_id    = $app->param('blog_id');
-    my $blog       = MT::Blog->load($blog_id);
     my $local_file = $param->{full_path};
     my $url        = $param->{full_url};
     my $bytes      = -s $local_file;
+
+    require MT::Blog;
+    my $blog = MT::Blog->load($blog_id);
 
     require File::Basename;
     my $local_basename = File::Basename::basename($local_file);
