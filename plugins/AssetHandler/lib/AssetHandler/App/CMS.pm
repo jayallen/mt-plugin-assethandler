@@ -1,9 +1,10 @@
 package AssetHandler::App::CMS;
-use strict;
 
+use strict;
+use warnings;
 use MT::Util qw( format_ts relative_date ); 
 
-use MT 4;
+use MT 4.2;
 
 sub open_batch_editor {
     my ($app) = @_;
