@@ -1,16 +1,43 @@
 package AssetHandler::Util;
 
+use File::Spec;
+use DirHandle;
+
 sub files_from_directory {
-    my $path = shift;
+    my ($path, $params) = @_;
+    $params           ||= {};
     my @files;
-    opendir( DIR, $path ) or die "Can't open $path: $!";
-    while ( my $file = readdir(DIR) ) {
-        next if $file =~ m{^\.};
-        push @files, { file => $file };
+    my $dir = new DirHandle $path;
+    if (defined $dir) {
+        # print STDERR "Inspecting directory: $path\n";
+        while ( defined( my $file = $dir->read )) {
+            my $absfile = File::Spec->catfile( $path, $file );
+            next if $file =~ m{^\.\.?$};
+            next if ! $params->{recurse} and -d $absfile;
+            next if $params->{exclude_ext}
+                and -f $absfile
+                and $file =~ m{\.$params->{exclude_ext}$}i;
+            next if $params->{include_ext}
+                and -f $absfile
+                and $file !~ m{\.$params->{include_ext}$}i;
+            push @files,
+                -d $absfile ? files_from_directory( $absfile, $params )
+                            : $absfile;
+        }
+        undef $d;
     }
-    closedir(DIR);
+    else {
+        die "Can't open $path: $!";
+    }
+
     return sort @files;
 }
+   # is_directory  => 1,
+   #  path          => $path,
+   #  url           => $url,
+   #  file_basename => $file,
+   #  full_path     => $path . $file,
+   #  full_url      => $url . $file
 
 sub process_import {
     my $app        = shift;

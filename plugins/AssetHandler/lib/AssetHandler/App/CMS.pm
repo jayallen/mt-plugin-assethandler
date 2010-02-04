@@ -4,7 +4,9 @@ use strict;
 use warnings;
 use MT::Util qw( format_ts relative_date );
 use MT 4.2;
+use File::Spec;
 
+use MT::Util qw( caturl );
 use AssetHandler::Util;
 
 sub open_batch_editor {
@@ -158,7 +160,7 @@ sub transport {
 
     my $param = {
         blog_id   => $blog_id,
-        blog_name => $blog->name
+        blog_name => $blog->name,
         path      => $path,
         url       => $app->param('url'),
         button    => 'continue',
@@ -196,7 +198,8 @@ sub _transport_directory {
     print_transport_progress( $plugin, $app, 'start' );
 
     foreach my $file (@files) {
-        next if -d ($path . $file);    # Skip any subdirectories for now
+        my $absfile = File::Spec->catfile( $path, $file );
+        next if -d $absfile;    # Skip any subdirectories for now
 
         AssetHandler::Util::process_import(
             $app,
@@ -204,15 +207,12 @@ sub _transport_directory {
                 path          => $path,
                 url           => $url,
                 file_basename => $file,
-                full_path     => $path . $file,
-                full_url      => $url . $file
+                full_path     => $absfile,
+                full_url      => caturl( $url, $file );
             }
         );
         $app->print(
-            $plugin->translate(
-                "Imported '[_1]'\n",
-                $path . $file
-            )
+            $plugin->translate( "Imported '[_1]'\n", $absfile )
         );
     }
 

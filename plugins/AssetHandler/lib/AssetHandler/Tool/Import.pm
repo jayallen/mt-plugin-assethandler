@@ -11,6 +11,8 @@ use base qw( MT::App::CLI );
 use MT::Log::Log4perl qw(l4mtdump); use Log::Log4perl qw( :resurrect );
 ###l4p our $logger = MT::Log::Log4perl->new();
 
+use AssetHandler::Util;
+
 sub option_spec {
     return (
         'blog|b=s', 'path=s@', 'recurse!',
@@ -59,6 +61,9 @@ sub mode_default {
     my $url     = $app->param('url');
     my $plugin  = MT->component('AssetHandler');
 
+    # FIXME The next line is just wrong
+    my $path = shift @paths;
+
     my $param = {
         blog_id   => $blog_id,
         button    => 'continue',
@@ -75,7 +80,7 @@ sub mode_default {
         if ( !@files ) {
             $param->{is_directory} = 1;
             $param->{files} = [ 
-                map { file => $_ }
+                map { +file => $_ }
                         AssetHandler::Util::files_from_directory( $path )
             ];
         }
