@@ -144,8 +144,8 @@ sub start_transporter {
     require MT::Blog;
     my $blog   = MT::Blog->load($blog_id);
     my $param;
-    ($param->{path} = $blog->site_path) =~ s{/+$}{/}g;
-    ($param->{url}  = $blog->site_url)  =~ s{/+$}{/}g;
+    ($param->{path} = $blog->site_path) =~ s{/*$}{/};
+    ($param->{url}  = $blog->site_url)  =~ s{/*$}{/};
     return $app->build_page( $plugin->load_tmpl('transporter.tmpl'), $param );
 }
 
