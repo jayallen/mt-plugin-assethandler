@@ -140,7 +140,14 @@ sub save_assets {
 sub start_transporter {
     my ($app) = @_;
     my $plugin = MT->component('AssetHandler');
-    return $app->build_page( $plugin->load_tmpl('transporter.tmpl') );
+    my $blog_id = $app->param('blog_id')
+      or return $app->error('No blog in context for asset import');
+    require MT::Blog;
+    my $blog   = MT::Blog->load($blog_id);
+    my $param;
+    ($param->{path} = $blog->site_path) =~ s{/+$}{/}g;
+    ($param->{url}  = $blog->site_url)  =~ s{/+$}{/}g;
+    return $app->build_page( $plugin->load_tmpl('transporter.tmpl'), $param );
 }
 
 sub transport {
