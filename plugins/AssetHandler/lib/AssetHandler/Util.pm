@@ -3,7 +3,7 @@ package AssetHandler::Util;
 use strict;
 use warnings;
 use File::Basename qw( basename fileparse );
-use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
+# use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
 
 sub create_asset {
     my ( $app, $param ) = @_;

@@ -6,7 +6,7 @@ use MT::Util qw( format_ts relative_date caturl );
 
 use MT 4.2;
 
-use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
+# use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
 use AssetHandler::Util;
 
 sub open_batch_editor {
