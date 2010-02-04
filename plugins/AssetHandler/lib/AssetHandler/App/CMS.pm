@@ -3,8 +3,8 @@ package AssetHandler::App::CMS;
 use strict;
 use warnings;
 use MT::Util qw( format_ts relative_date caturl );
-
 use MT 4.2;
+use File::Spec;
 
 # use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
 use AssetHandler::Util;
@@ -153,92 +153,108 @@ sub start_transporter {
 sub transport {
     my ($app)   = @_;
     ###l4p my $logger = MT::Log::Log4perl->new(); $logger->trace();
-    my $path    = $app->param('path');
-    my $url     = $app->param('url');
-    my $plugin  = MT->component('AssetHandler');
-    my $blog_id = $app->param('blog_id')
-      or return $app->error('No blog in context for asset import');
+    my $plugin = MT->component('AssetHandler');
+    (my $path  = $app->param('path')) =~ s{/*$}{/};
+    (my $url   = $app->param('url'))  =~ s{/*$}{/};
 
     require MT::Blog;
-    my $blog   = MT::Blog->load($blog_id);
+    my $blog_id = $app->param('blog_id')
+      or return $app->error('No blog in context for asset import');
+    my $blog   = MT::Blog->load($blog_id)
+        or return $app->error(
+            sprintf 'Failed to load blog %s: %s',
+                    $blog_id,
+                    (MT::Blog->errstr || "Blog not found")
+    );
     ###l4p $logger->debug('Blog ID: '.$blog->id);
 
     my $param = {
         blog_id   => $blog_id,
-        button    => 'continue',
+        blog_name => $blog->name,
         path      => $path,
-        url       => $url,
+        url       => $app->param('url'),
+        button    => 'continue',
         readonly  => 1,
-        blog_name => $blog->name
     };
 
-    if ( -d $path ) {
-        my @files = $app->param('file');
+    my $meth = -d $path ? \&_transport_directory : \&_transport_file;
+    $param   = $meth->( $app, $param );
+    return $app->build_page( $plugin->load_tmpl('transporter.tmpl'), $param );
+}
 
-        # This happens on the first step
-        if ( !@files ) {
-            $param->{is_directory} = 1;
-            my @files;
-            opendir( DIR, $path ) or die "Can't open $path: $!";
-            while ( my $file = readdir(DIR) ) {
-                next if $file =~ /^\./;
-                push @files, { file => $file };
-            }
-            closedir(DIR);
+sub _transport_directory {
+    my ( $app, $param ) = @_;
+    my $path            = $app->param('path');
+    my $url             = $app->param('url');
+    my $plugin          = MT->component('AssetHandler');
+    my @files           = $app->param('file');
 
-            @files = sort { $a->{file} cmp $b->{file} } @files;
-            $param->{files} = \@files;
-        }
-        else {
-            # We get here if the user has chosen some specific files to import
-            $path =~ s{/*$}{/};
-            $url  =~ s{/*$}{/};
-
-            print_transport_progress( $plugin, $app, 'start' );
-
-            require File::Spec;
-            foreach my $file (@files) {
-                my $file_path = File::Spec->catfile( $path, $file );
-                next if -d $file_path;    # Skip any subdirectories for now
-
-                ###l4p $logger->info('About to import file: '.$file_path);
-                require AssetHandler::Util;
-                my $asset = AssetHandler::Util::create_asset(
-                    $app,
-                    {   
-                        file_path => $file_path,
-                        url       => caturl( $url, $file ),
-                    }
+    # This happens on the first step
+    if ( !@files ) {
+        require AssetHandler::Util;
+        $param->{is_directory} = 1;        
+        @files
+            = map { s{^$path}{}g; { 'file' => $_ } }
+                AssetHandler::Util::files_from_directory(
+                    $path,
+                    { recurse => 1 }
                 );
-                ###l4p $logger->info(sprintf 'Back from create_asset with file %s. Asset ID %s', $asset->file_path, $asset->id);
-                $app->print(
-                    $plugin->translate(
-                        "Imported '[_1]'\n",
-                        $file_path
-                    )
-                );
-            }
-
-            print_transport_progress( $plugin, $app, 'end' );
-        }
+        $param->{files} = \@files;
+        return $param;
     }
-    else {
-        print_transport_progress( $plugin, $app, 'start' );
+
+    # At this point the user has chosen some specific files to import
+    $path .= '/' unless $path =~ m!/$!;
+    $url  .= '/' unless $url  =~ m!/$!;
+
+    print_transport_progress( $plugin, $app, 'start' );
+
+    foreach my $file (@files) {
+        my $file_path = File::Spec->catfile( $path, $file );
+        next if -d $file_path;    # Skip any subdirectories for now
 
         require AssetHandler::Util;
         my $asset = AssetHandler::Util::create_asset(
             $app,
             {
-                file_path => $path,
-                url       => $url
+                file_path => $file_path,
+                url       => caturl( $url, $file ),
             }
         );
-        $app->print( $plugin->translate( "Imported '[_1]'\n", $path ) );
-
-        print_transport_progress( $plugin, $app, 'end' );
+        $app->print(
+            $plugin->translate( "Imported '[_1]'\n", $file_path )
+        );
     }
 
-    return $app->build_page( $plugin->load_tmpl('transporter.tmpl'), $param );
+    print_transport_progress( $plugin, $app, 'end' );
+
+    $param;
+}
+
+sub _transport_file {
+    my ( $app, $param ) = @_;
+    my $path            = $app->param('path');
+    my $url             = $app->param('url');
+    my $plugin          = MT->component('AssetHandler');
+
+    print_transport_progress( $plugin, $app, 'start' );
+
+    ###l4p $logger->info('About to import file: '.$file_path);
+    require AssetHandler::Util;
+    my $asset = AssetHandler::Util::create_asset(
+        $app,
+        {   
+            file_path => $path,
+            url       => $url,
+        }
+    );
+    ###l4p $logger->info(sprintf 'Back from create_asset with file %s. Asset ID %s', $asset->file_path, $asset->id);
+
+    $app->print( $plugin->translate( "Imported '[_1]'\n", $path ) );
+
+    print_transport_progress( $plugin, $app, 'end' );
+
+    $param;
 }
 
 sub print_transport_progress {
