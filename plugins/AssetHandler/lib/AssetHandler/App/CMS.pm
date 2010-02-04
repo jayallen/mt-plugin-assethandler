@@ -6,8 +6,7 @@ use MT::Util qw( format_ts relative_date );
 
 use MT 4.2;
 
-use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect );
-our $logger;
+# use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
 
 sub open_batch_editor {
     my ($app)      = @_;
