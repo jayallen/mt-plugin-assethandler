@@ -6,6 +6,9 @@ use MT::Util qw( format_ts relative_date );
 
 use MT 4.2;
 
+use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect );
+our $logger;
+
 sub open_batch_editor {
     my ($app)      = @_;
     my $plugin     = MT->component('AssetHandler');
@@ -229,6 +232,7 @@ sub transport {
 sub _process_transport {
     my $app        = shift;
     my ($param)    = @_;
+    ###l4p $logger ||= MT::Log::Log4perl->new(); $logger->trace();
     my $blog_id    = $app->param('blog_id');
     my $local_file = $param->{full_path};
     my $url        = $param->{full_url};
@@ -277,7 +281,9 @@ sub _process_transport {
       )
     {
         $asset = $asset_pkg->new();
-        $asset->file_path($local_file);
+        (my $blog_root = $blog->site_path) =~ s{/?$}{}g;
+        (my $asset_path = $local_file) =~ s{^$blog_root}{%r};
+        $asset->file_path($asset_path);
         $asset->file_name($local_basename);
         $asset->file_ext($ext);
         $asset->blog_id($blog_id);
@@ -287,12 +293,15 @@ sub _process_transport {
         $asset->modified_by( $app->user->id );
     }
     my $original = $asset->clone;
-    $asset->url($url);
+    (my $blog_url = $blog->site_url) =~ s{/?$}{}g;
+    (my $asset_url = $url) =~ s{^$blog_url}{%r};
+    $asset->url($asset_url);
     if ($is_image) {
         $asset->image_width($w);
         $asset->image_height($h);
     }
     $asset->mime_type($mimetype) if $mimetype;
+    ###l4p $logger->debug('$asset: ', l4mtdump($asset));
     $asset->save;
     $app->run_callbacks( 'cms_post_save.asset', $app, $asset, $original );
 
