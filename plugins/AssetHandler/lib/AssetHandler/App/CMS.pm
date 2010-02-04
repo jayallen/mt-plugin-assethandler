@@ -3,8 +3,9 @@ package AssetHandler::App::CMS;
 use strict;
 use warnings;
 use MT::Util qw( format_ts relative_date );
-
 use MT 4.2;
+
+use AssetHandler::Util;
 
 sub open_batch_editor {
     my ($app)      = @_;
@@ -142,218 +143,105 @@ sub start_transporter {
 
 sub transport {
     my ($app)   = @_;
-    my $path    = $app->param('path');
-    my $url     = $app->param('url');
     my $plugin  = MT->component('AssetHandler');
+    my $path    = $app->param('path');
     my $blog_id = $app->param('blog_id')
       or return $app->error('No blog in context for asset import');
 
     require MT::Blog;
-    my $blog   = MT::Blog->load($blog_id);
+    my $blog   = MT::Blog->load($blog_id)
+        or return $app->error(
+            sprintf 'Failed to load blog %s: %s',
+                    $blog_id,
+                    (MT::Blog->errstr || "Blog not found")
+    );
 
     my $param = {
         blog_id   => $blog_id,
-        button    => 'continue',
-        path      => $path,
-        url       => $url,
-        readonly  => 1,
         blog_name => $blog->name
+        path      => $path,
+        url       => $app->param('url'),
+        button    => 'continue',
+        readonly  => 1,
     };
 
-    if ( -d $path ) {
-        my @files = $app->param('file');
-
-        # This happens on the first step
-        if ( !@files ) {
-            $param->{is_directory} = 1;
-            my @files;
-            opendir( DIR, $path ) or die "Can't open $path: $!";
-            while ( my $file = readdir(DIR) ) {
-                next if $file =~ /^\./;
-                push @files, { file => $file };
-            }
-            closedir(DIR);
-
-            @files = sort { $a->{file} cmp $b->{file} } @files;
-            $param->{files} = \@files;
-        }
-        else {
-
-            # We get here if the user has chosen some specific files to import
-            $path .= '/' unless $path =~ m!/$!;
-            $url  .= '/' unless $url  =~ m!/$!;
-
-            print_transport_progress( $plugin, $app, 'start' );
-
-            foreach my $file (@files) {
-                next if -d $path . $file;    # Skip any subdirectories for now
-
-                _process_transport(
-                    $app,
-                    {   is_directory  => 1,
-                        path          => $path,
-                        url           => $url,
-                        file_basename => $file,
-                        full_path     => $path . $file,
-                        full_url      => $url . $file
-                    }
-                );
-                $app->print(
-                    $plugin->translate(
-                        "Transported '[_1]'\n",
-                        $path . $file
-                    )
-                );
-            }
-
-            print_transport_progress( $plugin, $app, 'end' );
-        }
-    }
-    else {
-        print_transport_progress( $plugin, $app, 'start' );
-
-        _process_transport(
-            $app,
-            {   full_path => $path,
-                full_url  => $url
-            }
-        );
-        $app->print( $plugin->translate( "Imported '[_1]'\n", $path ) );
-
-        print_transport_progress( $plugin, $app, 'end' );
-    }
+    my $meth = -d $path ? \&_transport_directory : \&_transport_file;
+    $param   = $meth->( $app, $param );
 
     return $app->build_page( $plugin->load_tmpl('transporter.tmpl'), $param );
 }
 
-sub _process_transport {
-    my $app        = shift;
-    my ($param)    = @_;
-    my $blog_id    = $app->param('blog_id');
-    my $local_file = $param->{full_path};
-    my $url        = $param->{full_url};
-    my $bytes      = -s $local_file;
+sub _transport_directory {
+    my ( $app, $param ) = @_;
+    my $path            = $app->param('path');
+    my $url             = $app->param('url');
+    my $plugin          = MT->component('AssetHandler');
+    my @files           = $app->param('file');
 
-    require MT::Blog;
-    my $blog = MT::Blog->load($blog_id);
+    # This happens on the first step
+    if ( !@files ) {
+        require AssetHandler::Util;
+        $param->{is_directory} = 1;
+        
+        $param->{files}              # Unary + is necessary to inform "map"
+            = map { +'file' => $_ }  # See "perldoc -f map"
+                    AssetHandler::Util::files_from_directory( $path );
+        return $param;
+    }
 
-    require File::Basename;
-    my $local_basename = File::Basename::basename($local_file);
-    my $ext =
-      ( File::Basename::fileparse( $local_file, qr/[A-Za-z0-9]+$/ ) )[2];
+    # At this point the user has chosen some specific files to import
+    $path .= '/' unless $path =~ m!/$!;
+    $url  .= '/' unless $url  =~ m!/$!;
 
-    # Copied mostly from MT::App::CMS
+    print_transport_progress( $plugin, $app, 'start' );
 
-    my ( $fh, $mimetype );
-    open $fh, $local_file;
+    foreach my $file (@files) {
+        next if -d ($path . $file);    # Skip any subdirectories for now
 
-    ## Use Image::Size to check if the uploaded file is an image, and if so,
-    ## record additional image info (width, height). We first rewind the
-    ## filehandle $fh, then pass it in to imgsize.
-    seek $fh, 0, 0;
-    eval { require Image::Size; };
-    return $app->error(
-        $app->translate(
-                "Perl module Image::Size is required to determine "
-              . "width and height of uploaded images."
-        )
-    ) if $@;
-    my ( $w, $h, $id ) = Image::Size::imgsize($fh);
-
-    ## Close up the filehandle.
-    close $fh;
-
-    require MT::Asset;
-    my $asset_pkg = MT::Asset->handler_for_file($local_basename);
-    my $is_image =
-         defined($w)
-      && defined($h)
-      && $asset_pkg->isa('MT::Asset::Image');
-    my $asset;
-    if (!(  $asset = $asset_pkg->load(
-                { file_path => $local_file, blog_id => $blog_id }
+        AssetHandler::Util::process_import(
+            $app,
+            {   is_directory  => 1,
+                path          => $path,
+                url           => $url,
+                file_basename => $file,
+                full_path     => $path . $file,
+                full_url      => $url . $file
+            }
+        );
+        $app->print(
+            $plugin->translate(
+                "Imported '[_1]'\n",
+                $path . $file
             )
-        )
-      )
-    {
-        $asset = $asset_pkg->new();
-        $asset->file_path($local_file);
-        $asset->file_name($local_basename);
-        $asset->file_ext($ext);
-        $asset->blog_id($blog_id);
-        $asset->created_by( $app->user->id );
-    }
-    else {
-        $asset->modified_by( $app->user->id );
-    }
-    my $original = $asset->clone;
-    $asset->url($url);
-    if ($is_image) {
-        $asset->image_width($w);
-        $asset->image_height($h);
-    }
-    $asset->mime_type($mimetype) if $mimetype;
-    $asset->save;
-    $app->run_callbacks( 'cms_post_save.asset', $app, $asset, $original );
-
-    if ($is_image) {
-        $app->run_callbacks(
-            'cms_upload_file.' . $asset->class,
-            File  => $local_file,
-            file  => $local_file,
-            Url   => $url,
-            url   => $url,
-            Size  => $bytes,
-            size  => $bytes,
-            Asset => $asset,
-            asset => $asset,
-            Type  => 'image',
-            type  => 'image',
-            Blog  => $blog,
-            blog  => $blog
-        );
-        $app->run_callbacks(
-            'cms_upload_image',
-            File       => $local_file,
-            file       => $local_file,
-            Url        => $url,
-            url        => $url,
-            Size       => $bytes,
-            size       => $bytes,
-            Asset      => $asset,
-            asset      => $asset,
-            Height     => $h,
-            height     => $h,
-            Width      => $w,
-            width      => $w,
-            Type       => 'image',
-            type       => 'image',
-            ImageType  => $id,
-            image_type => $id,
-            Blog       => $blog,
-            blog       => $blog
-        );
-    }
-    else {
-        $app->run_callbacks(
-            'cms_upload_file.' . $asset->class,
-            File  => $local_file,
-            file  => $local_file,
-            Url   => $url,
-            url   => $url,
-            Size  => $bytes,
-            size  => $bytes,
-            Asset => $asset,
-            asset => $asset,
-            Type  => 'file',
-            type  => 'file',
-            Blog  => $blog,
-            blog  => $blog
         );
     }
 
+    print_transport_progress( $plugin, $app, 'end' );
+
+    $param;
 }
 
+sub _transport_file {
+    my ( $app, $param ) = @_;
+    my $path            = $app->param('path');
+    my $url             = $app->param('url');
+    my $plugin          = MT->component('AssetHandler');
+
+    print_transport_progress( $plugin, $app, 'start' );
+
+    AssetHandler::Util::process_import(
+        $app,
+        {
+            full_path => $path,
+            full_url  => $url
+        }
+    );
+    $app->print( $plugin->translate( "Imported '[_1]'\n", $path ) );
+
+    print_transport_progress( $plugin, $app, 'end' );
+
+    $param;
+}
 
 sub print_transport_progress {
     my $plugin = shift;
