@@ -5,6 +5,7 @@ use warnings;
 use File::Basename qw( basename fileparse );
 use File::Spec;
 use DirHandle;
+use Data::Dumper;
 # use MT::Log::Log4perl qw( l4mtdump ); use Log::Log4perl qw( :resurrect ); our $logger;
 
 sub create_asset {
@@ -12,10 +13,26 @@ sub create_asset {
     ###l4p my $logger = MT::Log::Log4perl->new(); $logger->trace();
     require MT::Blog;
     require MT::Image;
-    my $blog_id         = delete $param->{blog_id} || $app->param('blog_id');
-    my $blog            = MT::Blog->load($blog_id);
-    my $url             = delete $param->{url};
-    my $file_path       = delete $param->{file_path};
+    my $url       = delete $param->{url};
+    my $file_path = delete $param->{file_path};
+    my $user      = $app->user if $app->can('user');
+    my $blog      = $param->{blog}      ? delete $param->{blog}
+                  : $app->can('param')  ? $app->param('blog')
+                                        : undef;
+    
+    unless ( ref $blog and $blog->isa('MT::Blog') ) {
+        my $blog_id   = $blog               ? $blog
+                      : $param->{blog_id}   ? delete $param->{blog_id}
+                      : $app->can('param')  ? $app->param('blog_id')
+                                            : undef;
+        $blog = MT->model('blog')->load( $blog_id ) if $blog_id;
+    }
+                
+    unless ( $blog && $url && $file_path ) {
+        warn "The blog, url and path parameters are required";
+        return undef;
+    }
+
     $param->{file_name} = basename( $file_path );
     my $asset_pkg
         = MT->model('asset')->handler_for_file( $param->{file_name} );
@@ -42,46 +59,41 @@ sub create_asset {
     # Before attempting to load an existing asset, abbreviate the
     # file_path using the blog site root placeholder, %r, if the 
     # asset lives under the blog site root.
-    (my $blog_root       = $blog->site_path) =~ s{/?$}{}g;
-    my $abbrev_file_path = $file_path;
-    $abbrev_file_path    =~ s{^$blog_root}{%r};
+    (my $blog_root        = $blog->site_path) =~ s{/?$}{}g;
+    (my $abbrev_file_path = $file_path)       =~ s{^$blog_root}{%r};
 
-    # get_by_key loads the object or auto-instantiates a 
-    # new one if none exist with the given \%terms
-    my $asset = $asset_pkg->get_by_key({
-        file_path => $abbrev_file_path,
-        blog_id   => $blog_id
-    });
+    (my $blog_url   = $blog->site_url)  =~ s{/?$}{}g;
+    (my $abbrev_url = $url)             =~ s{^$blog_url}{%r};
+
+    my @assets = $asset_pkg->load([ 
+        { blog_id   => $blog->id, file_path => $abbrev_file_path }
+            => -or =>
+        { blog_id   => $blog->id, file_path => $file_path }
+    ]);
+
+    if ( @assets > 1 ) {
+        warn sprintf 'Possibly duplicate asset records in blog %s '
+                    .'with file path %s', $blog->id, $assets[0]->file_path;
+    }
+
+    my $asset    = shift @assets || $asset_pkg->new();
     my $original = $asset->clone;  # For callbacks
+    return if $asset->id;
 
-    if ( ! $asset->id ) {
-        # New object, set the other values
-        $asset->set_values( $param );
-
-        $asset->label( $param->{file_name} ) unless defined $asset->label;
-
-        $asset->created_by( $app->user->id )
-            if $app->can('user') and $app->user;
-
-        $asset->file_ext(
-            ( fileparse( $file_path, qr/[A-Za-z0-9]+$/ ) )[2]
-        );
-    }
-    else {
-        # Existing object, update modified by because
-        # we'll re-evaluate and update some columns
-        $asset->modified_by( $app->user->id );
-    }
+    # New object, set the other values
+    $asset->set_values( $param );
+    $asset->blog_id( $blog->id );
+    $asset->file_path( $abbrev_file_path );
+    $asset->url( $abbrev_url );
+    $asset->label( $param->{file_name} ) unless defined $asset->label;
+    $asset->created_by( $user ) if $user;
+    $asset->file_ext(
+        ( fileparse( $file_path, qr/[A-Za-z0-9]+$/ ) )[2]
+    );
 
     if ( $is_image ) {
         $asset->image_width($w);
         $asset->image_height($h);
-    }
-
-    unless ( $url =~ m{^\%r} ) {
-        (my $blog_url  = $blog->site_url) =~ s{/?$}{}g;
-        (my $asset_url = $url)            =~ s{^$blog_url}{%r};
-        $asset->url( $asset_url );
     }
 
     unless ( $asset->mime_type ) {
@@ -307,30 +319,30 @@ sub files_from_directory {
 
 __END__
 
-use strict;
-use File::Find ();
-
-# for the convenience of &wanted calls, including -eval statements:
-use vars qw/*name *dir *prune/;
-*name   = *File::Find::name;
-*dir    = *File::Find::dir;
-*prune  = *File::Find::prune;
-
-sub wanted;
-
-
-
-# Traverse desired filesystems
-File::Find::find({wanted => \&wanted}, '/Users/jay/Sites/filmcritic.local/html/images');
-exit;
-
-
-sub wanted {
-    my ($dev,$ino,$mode,$nlink,$uid,$gid);
-
-    (($dev,$ino,$mode,$nlink,$uid,$gid) = lstat($_)) &&
-    -f _
-    && /^.*\\.gif\z/s
-    && print("$name\n");
-}
-##########################################################
+# use strict;
+# use File::Find ();
+# 
+# # for the convenience of &wanted calls, including -eval statements:
+# use vars qw/*name *dir *prune/;
+# *name   = *File::Find::name;
+# *dir    = *File::Find::dir;
+# *prune  = *File::Find::prune;
+# 
+# sub wanted;
+# 
+# 
+# 
+# # Traverse desired filesystems
+# File::Find::find({wanted => \&wanted}, '/Users/jay/Sites/filmcritic.local/html/images');
+# exit;
+# 
+# 
+# sub wanted {
+#     my ($dev,$ino,$mode,$nlink,$uid,$gid);
+# 
+#     (($dev,$ino,$mode,$nlink,$uid,$gid) = lstat($_)) &&
+#     -f _
+#     && /^.*\\.gif\z/s
+#     && print("$name\n");
+# }
+# ##########################################################

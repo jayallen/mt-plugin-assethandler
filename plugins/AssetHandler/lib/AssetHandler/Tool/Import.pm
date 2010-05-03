@@ -1,18 +1,23 @@
 package AssetHandler::Tool::Import;
+use strict; use warnings; use Carp; use Data::Dumper;
 
-use strict;
-use warnings;
+use vars qw( $VERSION );
+$VERSION = '0.1';
+
 use Pod::Usage;
-use Data::Dumper;
 use File::Spec;
 use MT::Util qw( caturl );
-use base qw( MT::App::CLI );
 use Cwd qw( realpath );
 
-# use MT::Log::Log4perl qw(l4mtdump); use Log::Log4perl qw( :resurrect );
+use MT::Log::Log4perl qw(l4mtdump); use Log::Log4perl qw( :resurrect );
 ###l4p our $logger = MT::Log::Log4perl->new();
 
+use base qw( MT::App::CLI );
 use AssetHandler::Util;
+
+$| = 1;
+
+sub usage { '( --blog BLOG | --template TEMPLATE ) [ --debug ]' }
 
 sub option_spec {
     return (
@@ -23,19 +28,25 @@ sub option_spec {
     );
 }
 
-sub init_request {
-    my $app = shift;
-    ###l4p $logger ||= MT::Log::Log4perl->new(); $logger->trace();
-    $app->SUPER::init_request(@_) or return;
-
-    my $blog = $app->load_by_name_or_id( 'blog', $app->param('blog') )
-        or return;
-    $app->param( 'blog_id', $blog->id );
-    # print STDERR 'I just set $app->param( blog_id ) to '
-    #            . $app->param( 'blog_id' ).": ".Dumper($app->blog());
-        
-    # $app->blog( $app->param('blog') );
+sub help {
+    return q{
+        This is an asset import script
+    };
 }
+
+# sub init_request {
+#     my $app = shift;
+#     ###l4p $logger ||= MT::Log::Log4perl->new(); $logger->trace();
+#     $app->SUPER::init_request(@_) or return;
+# 
+#     my $blog = $app->load_by_name_or_id( 'blog', $app->param('blog') )
+#         or return;
+#     $app->param( 'blog_id', $blog->id );
+#     # print STDERR 'I just set $app->param( blog_id ) to '
+#     #            . $app->param( 'blog_id' ).": ".Dumper($app->blog());
+#         
+#     # $app->blog( $app->param('blog') );
+# }
 
 sub init_options {
     my $app = shift;
@@ -116,6 +127,10 @@ sub mode_default {
                                      $file_relpath ),
             }
         );
+        if ( ! $asset ) {
+            warn $app->errstr if $app->errstr;
+            next;
+        }
         push @imported, $asset;
         $app->print(
             $plugin->translate(
@@ -127,24 +142,4 @@ sub mode_default {
     return "Imported ".@imported." assets\n";
 }
 
-sub show_usage { 
-    my $app = shift;
-    ###l4p $logger ||= MT::Log::Log4perl->new(); $logger->trace();
-    pod2usage(@_ ? @_ : { -exitval => 1, -verbose => 0 });
-}
-
-sub show_options { 
-    my $app = shift;
-    ###l4p $logger ||= MT::Log::Log4perl->new(); $logger->trace();
-    pod2usage(@_ ? @_ : { -exitval => 1, -verbose => 1 });
-}
-
-sub show_docs {
-    my $app = shift;
-    ###l4p $logger ||= MT::Log::Log4perl->new(); $logger->trace();
-    pod2usage(@_ ? @_ : { -exitval => 1, -verbose => 2 });
-}
-
 1;
-
-__END__

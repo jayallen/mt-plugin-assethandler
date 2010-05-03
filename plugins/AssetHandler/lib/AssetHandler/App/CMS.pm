@@ -26,8 +26,8 @@ sub open_batch_editor {
         my ( $obj, $row ) = @_;
         my $blog = $obj->blog;
         $row->{blog_name} = $blog ? $blog->name : '-';
-        $row->{file_path} = $obj->file_path;   # has to be called to calculate
-        $row->{url} = $obj->url;    # this has to be called to calculate
+        $row->{file_path} = $obj->file_path; # has to be called to calculate
+        $row->{url} = $obj->url;        # this has to be called to calculate
         $row->{file_name} = File::Basename::basename( $row->{file_path} );
         my $meta = $obj->metadata;
         $row->{file_label} = $obj->label;

@@ -7,7 +7,7 @@ use lib "$Bin/lib", "$Bin/../lib", 'lib', 'extlib';
 use File::Spec;
 
 my @tests;
-my $imagedir = File::Spec->catdir($Bin, 'site', 'images' );
+my $imagedir = File::Spec->catdir($Bin, 'images' );
 
 BEGIN {
     @tests = (

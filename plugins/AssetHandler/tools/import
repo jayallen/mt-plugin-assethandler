@@ -1,15 +1,9 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
 use strict;
-use FindBin qw($Bin);
-use lib "$Bin/../lib";
-BEGIN {
-    my $mtdir = $ENV{MT_HOME} ? "$ENV{MT_HOME}/" : '';
-    unshift @INC, "$mtdir$_" foreach qw(lib extlib );
-}
+BEGIN { unshift @INC, qw( lib extlib ../lib ../extlib ) }
 use MT::Bootstrap::CLI App => 'AssetHandler::Tool::Import';
 
 __END__
-
 
 =head1 AssetHandler::Tool::Import
 
@@ -36,29 +30,30 @@ The ID or exact name of the blog to be used for import
 
 =item B<-r, --recurse>
 
-When a directory is specified as a path argument, this flag directs
-the program to search its subdirectories recursively for import
-files.
+When a directory is specified as a path argument, this flag directs the
+program to search its subdirectories recursively for import files. Assets will
+not be re-imported on subsequent runs as long as their file paths are
+unchanged.
 
 =item B<-u, --url URL>
 
-Specifies the URL corresponding to a single --path argument. This
-defaults to the blog URL so you should only need to specify this if
-the import path is outside of your blog root URL or if you want to
-use a special URL to access the assets (e.g. a subdomain like
-http://images.example.com for all images). This argument may only be
-used with one import path at a time and must correspond exactly with
-that path.
+This option specifies the URL corresponding to a single --path argument. It is
+only needed if the URL is not equal to or subordinate to your blog URL, for
+example, if you are using a different hostname for performance optimization or
+if your images directory is outside of your blog site URL.
+
+This argument may only be used with one import path at a time and must
+correspond exactly with that path.
 
 =item B<-e, --excludeext EXT>
 
-Specifies a file extension (case-insensitive) to exclude when
-searching for files to import. Can be specified multiple times.
+B<NOT YET IMPLEMENTED.> Specifies a file extension (case-insensitive) to exclude
+when searching for files to import. Can be specified multiple times.
 
 =item B<-i, --includeext EXT>
 
-The exact inverse of --excludeext. Specifies a file extension
-(case-insensitive) to include when searching for files to import.
+B<NOT YET IMPLEMENTED.> The exact inverse of --excludeext. Specifies a file
+extension (case-insensitive) to include when searching for files to import.
 Can be specified multiple times.
 
 =item B<-h>
